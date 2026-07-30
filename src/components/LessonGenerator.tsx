@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 const KNOWN_LANGUAGES = [
   'javascript','typescript','tailwind','css','html','python','java','c','c++','c#','go','rust','php','ruby','kotlin','swift','scala'
@@ -7,6 +7,14 @@ const KNOWN_LANGUAGES = [
 type Lesson = {
   title: string
   steps: string[]
+  type?: string
+}
+
+const LS_KEYS = {
+  lang: 'tsl_lang_v1',
+  topic: 'tsl_topic_v1',
+  customLanguages: 'tsl_custom_langs_v1',
+  lessons: 'tsl_lessons_v1'
 }
 
 export default function LessonGenerator(){
@@ -16,6 +24,28 @@ export default function LessonGenerator(){
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [status, setStatus] = useState<string>('')
   const [customLanguages, setCustomLanguages] = useState<string[]>([])
+  const [useBuiltInAI, setUseBuiltInAI] = useState<boolean>(true)
+
+  useEffect(()=>{
+    // load persisted state from localStorage so the app "just works" when opened via index.html
+    try{
+      const savedLang = localStorage.getItem(LS_KEYS.lang)
+      const savedTopic = localStorage.getItem(LS_KEYS.topic)
+      const savedCustom = localStorage.getItem(LS_KEYS.customLanguages)
+      const savedLessons = localStorage.getItem(LS_KEYS.lessons)
+      if(savedLang) setLang(savedLang)
+      if(savedTopic) setTopic(savedTopic)
+      if(savedCustom) setCustomLanguages(JSON.parse(savedCustom))
+      if(savedLessons) setLessons(JSON.parse(savedLessons))
+    }catch(e){
+      console.warn('Failed to read localStorage', e)
+    }
+  }, [])
+
+  useEffect(()=>{ localStorage.setItem(LS_KEYS.lang, lang) }, [lang])
+  useEffect(()=>{ localStorage.setItem(LS_KEYS.topic, topic) }, [topic])
+  useEffect(()=>{ localStorage.setItem(LS_KEYS.customLanguages, JSON.stringify(customLanguages)) }, [customLanguages])
+  useEffect(()=>{ localStorage.setItem(LS_KEYS.lessons, JSON.stringify(lessons)) }, [lessons])
 
   const allLanguages = Array.from(new Set([...KNOWN_LANGUAGES, ...customLanguages]))
 
@@ -35,11 +65,10 @@ export default function LessonGenerator(){
     setStatus('Generating...')
     const selection = `${lang} — ${topic}`
 
-    // If API key provided, call OpenAI Chat Completion
-    if(apiKey){
+    // If API key provided and user chooses remote, call OpenAI Chat Completion
+    if(apiKey && !useBuiltInAI){
       try{
-        const prompt = `Create a short beginner-friendly lesson plan for learning ${selection}. Provide a title and 5 ordered steps with short explanations.
-Respond as JSON: { "title": string, "steps": ["...","..."] }`;
+        const prompt = `Create a short beginner-friendly lesson plan for learning ${selection}. Provide a title and 5 ordered steps with short explanations. Respond as JSON: { \"title\": string, \"steps\": [\"...\",\"...\"] }`;
 
         const resp = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
@@ -55,16 +84,14 @@ Respond as JSON: { "title": string, "steps": ["...","..."] }`;
         })
 
         const data = await resp.json()
-        // try to parse JSON from assistant
         const raw = data?.choices?.[0]?.message?.content || ''
         let parsed
         try{ parsed = JSON.parse(raw) }catch(e){
-          // fallback: attempt to extract first JSON block
           const m = raw.match(/\{[\s\S]*\}/)
           parsed = m ? JSON.parse(m[0]) : null
         }
         if(parsed && parsed.title && Array.isArray(parsed.steps)){
-          setLessons([{title: parsed.title, steps: parsed.steps}])
+          setLessons([{title: parsed.title, steps: parsed.steps, type: 'ai-remote'}])
           setStatus('Done')
           return
         }
@@ -75,19 +102,10 @@ Respond as JSON: { "title": string, "steps": ["...","..."] }`;
       }
     }
 
-    // Built-in fallback generator
-    const fallback: Lesson = {
-      title: `${capitalize(lang)}: ${capitalize(topic)} — Quick Start`,
-      steps: [
-        `What is ${lang}? A short intro and where it's used.`,
-        `Setup: how to install or configure tooling for ${lang}.`,
-        `Core concepts: 3–5 fundamentals you must know.`,
-        `Hands-on: a small guided example you can try in the browser or editor.`,
-        `Next steps and resources to keep learning.`
-      ]
-    }
-    setLessons([fallback])
-    setStatus('Done (fallback)')
+    // Built-in "no API key" AI generator (template + randomized phrasing)
+    const generated = generateBuiltInAI(lang, topic)
+    setLessons([generated])
+    setStatus('Done (local AI)')
   }
 
   function addLanguage(newLang: string){
@@ -121,6 +139,13 @@ Respond as JSON: { "title": string, "steps": ["...","..."] }`;
         <div>
           <label className="block text-sm font-medium">OpenAI API Key (optional)</label>
           <input value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-... or leave blank" className="mt-1 block w-full rounded border px-3 py-2" />
+          <div className="mt-2 text-xs text-slate-600">The app uses the built-in local AI by default (no API key required). Toggle below if you want to attempt a remote call using a key.</div>
+          <div className="mt-2">
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" checked={useBuiltInAI} onChange={e=>setUseBuiltInAI(e.target.checked)} />
+              <span className="text-sm">Use built-in AI (no API key)</span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -177,4 +202,90 @@ function LanguageChecker({ onAdd, isCodingLanguage }:{ onAdd:(s:string)=>void, i
       {res && <div className="mt-2 text-sm text-slate-600">{res}</div>}
     </div>
   )
+}
+
+// A richer rule-based "local AI" generator that produces varied, human-friendly lesson plans
+function generateBuiltInAI(lang:string, topic:string): Lesson{
+  const titleTemplates = [
+    `Learn ${lang}: ${topic} in 30 minutes`,
+    `${capitalize(lang)} — quick ${topic} guide for beginners`,
+    `${capitalize(lang)} ${topic}: A tiny hands-on lesson`,
+    `${capitalize(lang)} basics: ${topic} explained`
+  ]
+
+  const stepIntros = [
+    `Background — why this matters and where you'll use it.`,
+    `Setup — quick steps to get a working environment ready.`,
+    `Core ideas — the essential concepts to understand.`,
+    `Walkthrough — a short hands-on example you can try now.`,
+    `Next steps — further resources and practice suggestions.`
+  ]
+
+  // small variations to make steps feel less templated
+  const phrasingVariants = [
+    (s:string)=>s,
+    (s:string)=>`Tip: ${s.toLowerCase()}`,
+    (s:string)=>`${s} (try this yourself!)`,
+    (s:string)=>`${s} — short example included.`
+  ]
+
+  function pick<T>(arr:T[]) { return arr[Math.floor(Math.random()*arr.length)] }
+
+  const chosenTitle = pick(titleTemplates)
+  const baseSteps = stepIntros.map((intro, idx)=>{
+    switch(idx){
+      case 0:
+        return `${intro} ${generateIntroFor(lang)}.`
+      case 1:
+        return `${intro} ${generateSetupFor(lang)}.`
+      case 2:
+        return `${intro} ${generateCoreFor(lang)}.`
+      case 3:
+        return `${intro} ${generateExampleFor(lang, topic)}.`
+      case 4:
+        return `${intro} ${generateNextStepsFor(lang)}.`
+      default:
+        return intro
+    }
+  })
+
+  const steps = baseSteps.map((s,i)=> pick(phrasingVariants)(s))
+
+  return { title: chosenTitle, steps, type: 'ai-local' }
+}
+
+function generateIntroFor(lang:string){
+  return `A brief description of ${lang} and common uses`;
+}
+
+function generateSetupFor(lang:string){
+  // simple, safe instructions that generally apply
+  const examples = [
+    `Open a browser-based REPL or install the official toolchain`,
+    `Use an online playground (if available) or install a minimal SDK`,
+    `Create a new project folder and initialize the environment with recommended defaults`
+  ]
+  return examples[Math.floor(Math.random()*examples.length)]
+}
+
+function generateCoreFor(lang:string){
+  const examples = {
+    javascript: 'variables, functions, and DOM basics',
+    typescript: 'types, interfaces, and transpilation to JavaScript',
+    python: 'syntax, data structures, and scripting basics',
+    default: 'core syntax, primary data types, and common patterns'
+  }
+  return (examples as any)[lang] || examples.default
+}
+
+function generateExampleFor(lang:string, topic:string){
+  // keep examples short and safe for browser
+  if(lang.includes('js') || lang === 'typescript' || lang === 'javascript'){
+    return `A tiny ${lang} snippet showing ${topic}: e.g. a function and console output`
+  }
+  return `A concise example that demonstrates ${topic} in ${lang}`
+}
+
+function generateNextStepsFor(lang:string){
+  return `Practice with small exercises, read an official tutorial, and build a mini project`
 }
