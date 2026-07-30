@@ -4,18 +4,49 @@ const KNOWN_LANGUAGES = [
   'javascript','typescript','tailwind','css','html','python','java','c','c++','c#','go','rust','php','ruby','kotlin','swift','scala'
 ]
 
+const ICON_MAP: Record<string,string> = {
+  javascript: 'js',
+  typescript: 'ts',
+  tailwind: 'tailwind',
+  css: 'css',
+  html: 'html',
+  python: 'python',
+  java: 'java',
+  c: 'c',
+  'c++': 'cpp',
+  'c#': 'csharp',
+  go: 'go',
+  rust: 'rust',
+  php: 'php',
+  ruby: 'ruby',
+  kotlin: 'kotlin',
+  swift: 'swift',
+  scala: 'scala'
+}
+
 type Lesson = {
   title: string
-  steps: string[]
-  type?: string
+  steps?: string[]
+  format?: string
+  payload?: any
 }
 
 const LS_KEYS = {
   lang: 'tsl_lang_v1',
   topic: 'tsl_topic_v1',
   customLanguages: 'tsl_custom_langs_v1',
-  lessons: 'tsl_lessons_v1'
+  lessons: 'tsl_lessons_v1',
+  lessonType: 'tsl_lesson_type_v1'
 }
+
+const LESSON_TYPES = [
+  { id: 'quick-lesson', label: 'Quick Lesson' },
+  { id: 'flashcards', label: 'Flashcards' },
+  { id: 'multiple-choice', label: 'Multiple Choice' },
+  { id: 'fill-blank', label: 'Fill-in-the-Blank' },
+  { id: 'coding-exercise', label: 'Coding Exercise' },
+  { id: 'translation', label: 'Translation' }
+]
 
 export default function LessonGenerator(){
   const [lang, setLang] = useState<string>('typescript')
@@ -25,18 +56,20 @@ export default function LessonGenerator(){
   const [status, setStatus] = useState<string>('')
   const [customLanguages, setCustomLanguages] = useState<string[]>([])
   const [useBuiltInAI, setUseBuiltInAI] = useState<boolean>(true)
+  const [lessonType, setLessonType] = useState<string>('quick-lesson')
 
   useEffect(()=>{
-    // load persisted state from localStorage so the app "just works" when opened via index.html
     try{
       const savedLang = localStorage.getItem(LS_KEYS.lang)
       const savedTopic = localStorage.getItem(LS_KEYS.topic)
       const savedCustom = localStorage.getItem(LS_KEYS.customLanguages)
       const savedLessons = localStorage.getItem(LS_KEYS.lessons)
+      const savedType = localStorage.getItem(LS_KEYS.lessonType)
       if(savedLang) setLang(savedLang)
       if(savedTopic) setTopic(savedTopic)
       if(savedCustom) setCustomLanguages(JSON.parse(savedCustom))
       if(savedLessons) setLessons(JSON.parse(savedLessons))
+      if(savedType) setLessonType(savedType)
     }catch(e){
       console.warn('Failed to read localStorage', e)
     }
@@ -46,15 +79,14 @@ export default function LessonGenerator(){
   useEffect(()=>{ localStorage.setItem(LS_KEYS.topic, topic) }, [topic])
   useEffect(()=>{ localStorage.setItem(LS_KEYS.customLanguages, JSON.stringify(customLanguages)) }, [customLanguages])
   useEffect(()=>{ localStorage.setItem(LS_KEYS.lessons, JSON.stringify(lessons)) }, [lessons])
+  useEffect(()=>{ localStorage.setItem(LS_KEYS.lessonType, lessonType) }, [lessonType])
 
   const allLanguages = Array.from(new Set([...KNOWN_LANGUAGES, ...customLanguages]))
 
   function isCodingLanguage(input: string){
     const normalized = input.trim().toLowerCase()
     if(!normalized) return false
-    // direct match
     if(allLanguages.includes(normalized)) return true
-    // fuzzy: contains or startsWith
     for(const l of allLanguages){
       if(l.includes(normalized) || normalized.includes(l)) return true
     }
@@ -65,24 +97,18 @@ export default function LessonGenerator(){
     setStatus('Generating...')
     const selection = `${lang} — ${topic}`
 
-    // If API key provided and user chooses remote, call OpenAI Chat Completion
+    // remote AI path (optional)
     if(apiKey && !useBuiltInAI){
       try{
-        const prompt = `Create a short beginner-friendly lesson plan for learning ${selection}. Provide a title and 5 ordered steps with short explanations. Respond as JSON: { \"title\": string, \"steps\": [\"...\",\"...\"] }`;
-
+        const prompt = `Create a ${lessonType} for ${selection}. Produce a JSON object appropriate to the format. Keep it concise.`
         const resp = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`
           },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [{role:'user', content: prompt}],
-            max_tokens: 400
-          })
+          body: JSON.stringify({ model: 'gpt-4o-mini', messages:[{role:'user', content: prompt}], max_tokens: 400 })
         })
-
         const data = await resp.json()
         const raw = data?.choices?.[0]?.message?.content || ''
         let parsed
@@ -90,20 +116,19 @@ export default function LessonGenerator(){
           const m = raw.match(/\{[\s\S]*\}/)
           parsed = m ? JSON.parse(m[0]) : null
         }
-        if(parsed && parsed.title && Array.isArray(parsed.steps)){
-          setLessons([{title: parsed.title, steps: parsed.steps, type: 'ai-remote'}])
-          setStatus('Done')
+        if(parsed && parsed.title){
+          setLessons([{ title: parsed.title, payload: parsed, format: lessonType }])
+          setStatus('Done (remote AI)')
           return
         }
-        setStatus('AI returned unexpected structure; falling back to built-in generator')
       }catch(err){
         console.error(err)
-        setStatus('AI call failed; falling back to built-in generator')
+        setStatus('Remote AI failed; falling back to built-in')
       }
     }
 
-    // Built-in "no API key" AI generator (template + randomized phrasing)
-    const generated = generateBuiltInAI(lang, topic)
+    // built-in generator with support for multiple lesson types
+    const generated = generateBuiltInAI(lang, topic, lessonType)
     setLessons([generated])
     setStatus('Done (local AI)')
   }
@@ -119,16 +144,20 @@ export default function LessonGenerator(){
     setStatus(`Added ${newLang} to custom languages`)
   }
 
+  const selectedIcon = ICON_MAP[lang]
+  const iconUrl = selectedIcon ? `https://skillicons.dev/icons?i=${selectedIcon}` : undefined
+
   return (
     <div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         <div>
           <label className="block text-sm font-medium">Language</label>
-          <select value={lang} onChange={e=>setLang(e.target.value)} className="mt-1 block w-full rounded border px-3 py-2">
-            {allLanguages.map(l=> (
-              <option key={l} value={l}>{capitalize(l)}</option>
-            ))}
-          </select>
+          <div className="mt-1 flex items-center gap-2">
+            {iconUrl && <img src={iconUrl} alt="icon" width={28} height={28} />}
+            <select value={lang} onChange={e=>setLang(e.target.value)} className="block w-full rounded border px-3 py-2">
+              {allLanguages.map(l=> <option key={l} value={l}>{capitalize(l)}</option>)}
+            </select>
+          </div>
         </div>
 
         <div>
@@ -137,9 +166,16 @@ export default function LessonGenerator(){
         </div>
 
         <div>
+          <label className="block text-sm font-medium">Lesson Type</label>
+          <select value={lessonType} onChange={e=>setLessonType(e.target.value)} className="mt-1 block w-full rounded border px-3 py-2">
+            {LESSON_TYPES.map(t=> <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </div>
+
+        <div>
           <label className="block text-sm font-medium">OpenAI API Key (optional)</label>
           <input value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-... or leave blank" className="mt-1 block w-full rounded border px-3 py-2" />
-          <div className="mt-2 text-xs text-slate-600">The app uses the built-in local AI by default (no API key required). Toggle below if you want to attempt a remote call using a key.</div>
+          <div className="mt-2 text-xs text-slate-600">Using built-in AI by default (no key). Uncheck to attempt remote AI with a key.</div>
           <div className="mt-2">
             <label className="inline-flex items-center gap-2">
               <input type="checkbox" checked={useBuiltInAI} onChange={e=>setUseBuiltInAI(e.target.checked)} />
@@ -150,7 +186,7 @@ export default function LessonGenerator(){
       </div>
 
       <div className="mt-4 flex gap-2">
-        <button onClick={generateLesson} className="px-4 py-2 bg-indigo-600 text-white rounded">Generate Lesson</button>
+        <button onClick={generateLesson} className="px-4 py-2 bg-indigo-600 text-white rounded">Generate</button>
         <button onClick={()=>{ setLessons([]); setStatus('') }} className="px-4 py-2 border rounded">Clear</button>
       </div>
 
@@ -165,15 +201,104 @@ export default function LessonGenerator(){
 
         <div className="mt-4 space-y-4">
           {lessons.map((l,idx)=> (
-            <div key={idx} className="p-4 border rounded bg-slate-50">
-              <h4 className="font-bold">{l.title}</h4>
-              <ol className="list-decimal list-inside mt-2 space-y-1">
-                {l.steps.map((s,i)=> <li key={i} className="text-sm text-slate-700">{s}</li>)}
-              </ol>
+            <LessonRenderer key={idx} lesson={l} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LessonRenderer({ lesson }:{ lesson:Lesson }){
+  const format = lesson.format || 'quick-lesson'
+  if(format === 'flashcards' && lesson.payload && Array.isArray(lesson.payload.cards)){
+    return (
+      <div className="p-4 border rounded bg-slate-50">
+        <h4 className="font-bold">{lesson.title}</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          {lesson.payload.cards.map((c:any, i:number)=>(
+            <Flashcard key={i} front={c.front} back={c.back} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if(format === 'multiple-choice' && lesson.payload && Array.isArray(lesson.payload.questions)){
+    return (
+      <div className="p-4 border rounded bg-slate-50">
+        <h4 className="font-bold">{lesson.title}</h4>
+        <div className="space-y-4 mt-3">
+          {lesson.payload.questions.map((q:any, i:number)=> (
+            <div key={i} className="p-3 border rounded">
+              <div className="font-medium">{i+1}. {q.question}</div>
+              <div className="mt-2 space-y-2">
+                {q.options.map((opt:string, oi:number)=>(
+                  <div key={oi} className="flex items-center gap-2">
+                    <input type="radio" name={`mc-${i}`} />
+                    <div>{opt}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
       </div>
+    )
+  }
+
+  if(format === 'fill-blank' && lesson.payload && Array.isArray(lesson.payload.items)){
+    return (
+      <div className="p-4 border rounded bg-slate-50">
+        <h4 className="font-bold">{lesson.title}</h4>
+        <div className="space-y-3 mt-3">
+          {lesson.payload.items.map((it:any, i:number)=> (
+            <div key={i}>
+              <div className="text-sm">{it.sentence.replace('_', '_____')}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if(format === 'coding-exercise' && lesson.payload){
+    return (
+      <div className="p-4 border rounded bg-slate-50">
+        <h4 className="font-bold">{lesson.title}</h4>
+        <div className="mt-3">
+          <div className="font-medium">Problem</div>
+          <div className="mt-2 text-sm whitespace-pre-wrap">{lesson.payload.prompt}</div>
+          {lesson.payload.starter && (
+            <pre className="mt-3 p-3 bg-white rounded border overflow-auto"><code>{lesson.payload.starter}</code></pre>
+          )}
+          {lesson.payload.solution && (
+            <details className="mt-3"><summary className="cursor-pointer">Show solution</summary><pre className="mt-2 p-3 bg-white rounded border overflow-auto"><code>{lesson.payload.solution}</code></pre></details>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // default: simple steps list
+  return (
+    <div className="p-4 border rounded bg-slate-50">
+      <h4 className="font-bold">{lesson.title}</h4>
+      {lesson.steps && (
+        <ol className="list-decimal list-inside mt-2 space-y-1">
+          {lesson.steps.map((s,i)=>(<li key={i} className="text-sm text-slate-700">{s}</li>))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+function Flashcard({ front, back }:{ front:string, back:string }){
+  const [flipped, setFlipped] = useState(false)
+  return (
+    <div className="p-4 border rounded bg-white">
+      <div className="font-medium">{flipped ? back : front}</div>
+      <button className="mt-2 px-3 py-1 border rounded" onClick={()=>setFlipped(f=>!f)}>{flipped ? 'Show front' : 'Show back'}</button>
     </div>
   )
 }
@@ -204,88 +329,76 @@ function LanguageChecker({ onAdd, isCodingLanguage }:{ onAdd:(s:string)=>void, i
   )
 }
 
-// A richer rule-based "local AI" generator that produces varied, human-friendly lesson plans
-function generateBuiltInAI(lang:string, topic:string): Lesson{
-  const titleTemplates = [
-    `Learn ${lang}: ${topic} in 30 minutes`,
-    `${capitalize(lang)} — quick ${topic} guide for beginners`,
-    `${capitalize(lang)} ${topic}: A tiny hands-on lesson`,
-    `${capitalize(lang)} basics: ${topic} explained`
-  ]
+// Built-in generators for the different lesson types
+function generateBuiltInAI(lang:string, topic:string, lessonType:string): Lesson{
+  const title = `${capitalize(lang)} — ${capitalize(topic)} (${LESSON_TYPES.find(t=>t.id===lessonType)?.label})`
 
-  const stepIntros = [
-    `Background — why this matters and where you'll use it.`,
-    `Setup — quick steps to get a working environment ready.`,
-    `Core ideas — the essential concepts to understand.`,
-    `Walkthrough — a short hands-on example you can try now.`,
-    `Next steps — further resources and practice suggestions.`
-  ]
-
-  // small variations to make steps feel less templated
-  const phrasingVariants = [
-    (s:string)=>s,
-    (s:string)=>`Tip: ${s.toLowerCase()}`,
-    (s:string)=>`${s} (try this yourself!)`,
-    (s:string)=>`${s} — short example included.`
-  ]
-
-  function pick<T>(arr:T[]) { return arr[Math.floor(Math.random()*arr.length)] }
-
-  const chosenTitle = pick(titleTemplates)
-  const baseSteps = stepIntros.map((intro, idx)=>{
-    switch(idx){
-      case 0:
-        return `${intro} ${generateIntroFor(lang)}.`
-      case 1:
-        return `${intro} ${generateSetupFor(lang)}.`
-      case 2:
-        return `${intro} ${generateCoreFor(lang)}.`
-      case 3:
-        return `${intro} ${generateExampleFor(lang, topic)}.`
-      case 4:
-        return `${intro} ${generateNextStepsFor(lang)}.`
-      default:
-        return intro
+  switch(lessonType){
+    case 'flashcards': {
+      const cards = [
+        { front: `What is ${lang}?`, back: `${lang} is ... a short description suitable for beginners.` },
+        { front: `How do you set up ${lang}?`, back: `Install or open a playground; follow minimal setup steps.` },
+        { front: `Key concept in ${lang}`, back: `An important concept explained briefly.` }
+      ]
+      return { title, format: 'flashcards', payload: { cards } }
     }
-  })
 
-  const steps = baseSteps.map((s,i)=> pick(phrasingVariants)(s))
+    case 'multiple-choice': {
+      const questions = [
+        { question: `Which statement about ${lang} is true?`, options: [`It's mainly used for web`, `It's a database`, `It's a CSS framework`], answer: 0 },
+        { question: `What is a core feature of ${lang}?`, options: [`Static typing`, `Photos`, `Networking`], answer: 0 }
+      ]
+      return { title, format: 'multiple-choice', payload: { questions } }
+    }
 
-  return { title: chosenTitle, steps, type: 'ai-local' }
-}
+    case 'fill-blank': {
+      const items = [
+        { sentence: `${capitalize(lang)} files often end with ____` },
+        { sentence: `A common data type in ${lang} is ____` }
+      ]
+      return { title, format: 'fill-blank', payload: { items } }
+    }
 
-function generateIntroFor(lang:string){
-  return `A brief description of ${lang} and common uses`;
-}
+    case 'coding-exercise': {
+      const prompt = `Create a small ${lang} program that demonstrates ${topic}. Keep it short and runnable in a minimal environment.`
+      const starter = generateStarterFor(lang)
+      const solution = generateSolutionFor(lang, topic)
+      return { title, format: 'coding-exercise', payload: { prompt, starter, solution } }
+    }
 
-function generateSetupFor(lang:string){
-  // simple, safe instructions that generally apply
-  const examples = [
-    `Open a browser-based REPL or install the official toolchain`,
-    `Use an online playground (if available) or install a minimal SDK`,
-    `Create a new project folder and initialize the environment with recommended defaults`
-  ]
-  return examples[Math.floor(Math.random()*examples.length)]
-}
+    case 'translation': {
+      const items = [
+        { source: 'Hello, how are you?', target: '...' },
+        { source: 'I would like a cup of tea.', target: '...' }
+      ]
+      return { title, format: 'translation', payload: { items } }
+    }
 
-function generateCoreFor(lang:string){
-  const examples = {
-    javascript: 'variables, functions, and DOM basics',
-    typescript: 'types, interfaces, and transpilation to JavaScript',
-    python: 'syntax, data structures, and scripting basics',
-    default: 'core syntax, primary data types, and common patterns'
+    default: {
+      const steps = [
+        `What is ${lang}? A short intro and where it's used.`,
+        `Setup: how to install or configure tooling for ${lang}.`,
+        `Core concepts: 3–5 fundamentals you must know.`,
+        `Hands-on: a small guided example you can try in the browser or editor.`,
+        `Next steps and resources to keep learning.`
+      ]
+      return { title, format: 'quick-lesson', steps }
+    }
   }
-  return (examples as any)[lang] || examples.default
 }
 
-function generateExampleFor(lang:string, topic:string){
-  // keep examples short and safe for browser
+function generateStarterFor(lang:string){
   if(lang.includes('js') || lang === 'typescript' || lang === 'javascript'){
-    return `A tiny ${lang} snippet showing ${topic}: e.g. a function and console output`
+    return `console.log('Hello from ${lang}')`
   }
-  return `A concise example that demonstrates ${topic} in ${lang}`
+  if(lang === 'python') return `print('Hello from python')`
+  return `// starter code for ${lang}`
 }
 
-function generateNextStepsFor(lang:string){
-  return `Practice with small exercises, read an official tutorial, and build a mini project`
+function generateSolutionFor(lang:string, topic:string){
+  if(lang.includes('js') || lang === 'typescript' || lang === 'javascript'){
+    return `function greet(){\n  console.log('Hello from ${lang} — ${topic} example')\n}\ngreet()`
+  }
+  if(lang === 'python') return `def greet():\n    print('Hello from python — ${topic} example')\n\ngreet()`
+  return `// solution for ${lang}`
 }
