@@ -1,24 +1,22 @@
-# TSL — Teach Select Learn
+## Static HTML5 demo
 
-This repository is a starter site built with TypeScript + React + Tailwind CSS that generates coding lessons for selected languages and topics. It includes:
+I've added a small static HTML5 fallback demo to the repository for users who want a no-build, no-Node preview of TSL:
 
-- A lesson generator UI that can optionally call OpenAI (paste your API key in the UI).
-- A language checker to verify or add custom languages.
+- `index-static.html` — an HTML5 page that includes a tiny lesson-generator UI
+- `static/styles.css` — minimal styles for the demo
+- `static/main.js` — a small vanilla-JS fallback lesson generator (no AI, local only)
 
-How to run locally:
+How to use
 
-1. Install dependencies:
+- Open `index-static.html` directly in a browser, or serve the repo using a static server (e.g., `npx serve` or `python -m http.server`).
+- The existing React + TypeScript app is still in `src/` and is the default development experience (`npm run dev`).
 
-   npm install
+Next steps I can take (pick one):
 
-2. Start dev server:
+A) Publish the production build (`dist/`) to GitHub Pages or commit a build output so the static site is directly viewable. This requires running the build locally or in CI and committing the output.
 
-   npm run dev
+B) Convert the React/TypeScript app into a vanilla HTML/JS app by rewriting components. This is more involved — I can scaffold the rewrite and convert core screens (e.g., the lesson generator) step-by-step.
 
-Open http://localhost:5173
+C) Add a lightweight serverless API or client-side persistence for saving custom languages.
 
-Notes and next steps:
-
-- The repo uses a simple fallback generator when no OpenAI API key is provided. To enable advanced AI-generated lessons, paste an OpenAI-compatible API key in the form.
-- You can extend the language list in src/components/LessonGenerator.tsx or persist custom languages to localStorage or a backend.
-- Consider adding interactive coding playgrounds (e.g., iframe-based sandboxes) and progress tracking.
+Tell me which next step you want me to take and I will proceed.

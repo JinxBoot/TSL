@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TSL — Teach Select Learn (Static HTML5 demo)</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>TSL — Static HTML5 Demo</h1>
+    </header>
+
+    <main>
+      <p>
+        This is a minimal static HTML5 fallback for the TSL project. The repo also
+        contains the full TypeScript + React app (src/). Run the dev server with
+        <code>npm run dev</code> to use the React app.
+      </p>
+
+      <section id="app" aria-labelledby="demo-title">
+        <h2 id="demo-title">Generate a simple lesson</h2>
+
+        <label for="language">Language</label>
+        <input id="language" placeholder="e.g., JavaScript" />
+
+        <label for="topic">Topic</label>
+        <input id="topic" placeholder="e.g., Arrays" />
+
+        <button id="generate">Generate Lesson</button>
+
+        <pre id="output" aria-live="polite"></pre>
+      </section>
+    </main>
+
+    <footer>
+      <p>Static demo — part of the TSL (Teach Select Learn) project.</p>
+    </footer>
+
+    <script src="/static/main.js" defer></script>
+  </body>
+</html>
