@@ -1,22 +1,25 @@
-## Static HTML5 demo
+## Vanilla HTML5 port
 
-I've added a small static HTML5 fallback demo to the repository for users who want a no-build, no-Node preview of TSL:
+A new lightweight, dependency-free version of the lesson generator has been added at `vanilla/`.
 
-- `index-static.html` — an HTML5 page that includes a tiny lesson-generator UI
-- `static/styles.css` — minimal styles for the demo
-- `static/main.js` — a small vanilla-JS fallback lesson generator (no AI, local only)
+Files added:
+
+- `vanilla/index.html` — the HTML5 page for the app
+- `vanilla/styles.css` — minimal styles
+- `vanilla/main.js` — a vanilla JavaScript port of the LessonGenerator component (client-only)
 
 How to use
 
-- Open `index-static.html` directly in a browser, or serve the repo using a static server (e.g., `npx serve` or `python -m http.server`).
-- The existing React + TypeScript app is still in `src/` and is the default development experience (`npm run dev`).
+- Open `vanilla/index.html` directly in a browser, or serve the `vanilla/` directory with a static server (e.g., `npx serve vanilla` or `python -m http.server` from the vanilla/ folder).
+- The page uses the built-in lesson generator by default. You can optionally provide an OpenAI-compatible API key and uncheck "Use built-in AI" to attempt remote AI generation (requests go to api.openai.com). Be careful with API keys in the browser.
 
-Next steps I can take (pick one):
+Notes
 
-A) Publish the production build (`dist/`) to GitHub Pages or commit a build output so the static site is directly viewable. This requires running the build locally or in CI and committing the output.
+- This is a client-only port intended as a drop-in HTML5 demo. It reproduces the main features of `src/components/LessonGenerator.tsx`, including multiple lesson types, a language checker, and localStorage persistence for custom languages and generated lessons.
+- The original React + TypeScript application remains in `src/` and is still the primary development experience (`npm run dev`).
 
-B) Convert the React/TypeScript app into a vanilla HTML/JS app by rewriting components. This is more involved — I can scaffold the rewrite and convert core screens (e.g., the lesson generator) step-by-step.
+Next steps you might want:
 
-C) Add a lightweight serverless API or client-side persistence for saving custom languages.
-
-Tell me which next step you want me to take and I will proceed.
+- Replace the default `index.html` with the vanilla entry if you want the repository to serve the HTML5 page by default (I can update the root `index.html` to point to `vanilla/index.html`).
+- Add a build step or CI job that publishes the vanilla folder to GitHub Pages.
+- Improve styling and accessibility or add interactive live-editing for coding exercises.

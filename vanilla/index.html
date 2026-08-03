@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TSL — Teach Select Learn (Vanilla HTML5)</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>TSL — Vanilla HTML5</h1>
+      <p class="muted">A lightweight, dependency-free port of the lesson generator (client-only).</p>
+    </header>
+
+    <main>
+      <section id="controls" aria-labelledby="demo-title">
+        <h2 id="demo-title">Generate a lesson</h2>
+
+        <div class="form-row">
+          <label for="language">Language</label>
+          <div class="inline">
+            <select id="language"></select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label for="topic">Topic</label>
+          <input id="topic" placeholder="e.g., Arrays" />
+        </div>
+
+        <div class="form-row">
+          <label for="lessonType">Lesson Type</label>
+          <select id="lessonType">
+            <option value="quick-lesson">Quick Lesson</option>
+            <option value="flashcards">Flashcards</option>
+            <option value="multiple-choice">Multiple Choice</option>
+            <option value="fill-blank">Fill-in-the-Blank</option>
+            <option value="coding-exercise">Coding Exercise</option>
+            <option value="translation">Translation</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label for="apiKey">OpenAI API Key (optional)</label>
+          <input id="apiKey" placeholder="sk-... or leave blank" />
+        </div>
+
+        <div class="form-row small">
+          <label><input type="checkbox" id="useBuiltInAI" checked /> Use built-in AI (no key)</label>
+        </div>
+
+        <div class="form-row buttons">
+          <button id="generate">Generate</button>
+          <button id="clear">Clear</button>
+        </div>
+
+        <hr />
+
+        <h3>Language checker</h3>
+        <div class="form-row">
+          <input id="langCheck" placeholder="Type a language name e.g. 'elm'" />
+          <button id="check">Check</button>
+          <button id="addLang">Add</button>
+        </div>
+        <div id="checkResult" class="muted small"></div>
+
+        <div id="status" class="muted small" aria-live="polite"></div>
+      </section>
+
+      <section id="output">
+        <h2>Lessons</h2>
+        <div id="lessons"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p class="muted">Vanilla port — part of the TSL (Teach Select Learn) project.</p>
+    </footer>
+
+    <script src="main.js" defer></script>
+  </body>
+</html>
